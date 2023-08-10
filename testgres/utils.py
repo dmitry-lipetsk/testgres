@@ -175,7 +175,7 @@ def get_pg_version():
 
     # get raw version (e.g. postgres (PostgreSQL) 9.5.7)
     _params = [get_bin_path('postgres'), '--version']
-    raw_ver = tconf.os_ops.exec_command(_params, encoding='utf-8')
+    raw_ver = tconf.os_ops.exec_command(_params)
 
     # cook version of PostgreSQL
     version = raw_ver.strip().split(' ')[-1] \

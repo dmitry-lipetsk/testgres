@@ -18,7 +18,7 @@ class TestRemoteOperations:
         self.operations = RemoteOperations(conn_params)
 
         yield
-        self.operations.__del__()
+        self.operations.__exit__()
 
     def test_exec_command_success(self):
         """
@@ -27,7 +27,7 @@ class TestRemoteOperations:
         cmd = "python3 --version"
         response = self.operations.exec_command(cmd, wait_exit=True)
 
-        assert b'Python 3.' in response
+        assert 'Python 3.' in response
 
     def test_exec_command_failure(self):
         """
@@ -38,7 +38,7 @@ class TestRemoteOperations:
             exit_status, result, error = self.operations.exec_command(cmd, verbose=True, wait_exit=True)
         except ExecUtilException as e:
             error = e.message
-        assert error == b'Utility exited with non-zero code. Error: bash: line 1: nonexistent_command: command not found\n'
+        assert error == 'Utility exited with non-zero code. Error: bash: line 1: nonexistent_command: command not found\n'
 
     def test_is_executable_true(self):
         """
@@ -91,7 +91,7 @@ class TestRemoteOperations:
             exit_status, result, error = self.operations.rmdirs(path, verbose=True)
         except ExecUtilException as e:
             error = e.message
-        assert error == b"Utility exited with non-zero code. Error: rm: cannot remove '/root/test_dir': Permission denied\n"
+        assert error == "Utility exited with non-zero code. Error: rm: cannot remove '/root/test_dir': Permission denied\n"
 
     def test_listdir(self):
         """
@@ -143,7 +143,7 @@ class TestRemoteOperations:
 
         self.operations.write(filename, data, binary=True, truncate=True)
 
-        response = self.operations.read(filename, binary=True)
+        response = self.operations.read(filename, encoding=None)
 
         assert response == data
 
@@ -163,7 +163,7 @@ class TestRemoteOperations:
         """
         filename = "/usr/bin/python3"
 
-        response = self.operations.read(filename, binary=True)
+        response = self.operations.read(filename, encoding=None)
 
         assert isinstance(response, bytes)
 

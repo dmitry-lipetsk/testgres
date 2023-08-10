@@ -55,7 +55,7 @@ from testgres.node import ProcessProxy, ConnectionParams
 conn_params = ConnectionParams(host=os.getenv('RDBMS_TESTPOOL1_HOST') or '172.18.0.3',
                                username='dev',
                                ssh_key=os.getenv(
-                                   'RDBMS_TESTPOOL_SSHKEY') or '../../container_files/postgres/ssh/id_ed25519')
+                                   'RDBMS_TESTPOOL_SSHKEY') or '../../../container_files/postgres/ssh/id_ed25519')
 os_ops = RemoteOperations(conn_params)
 testgres_config.set_os_ops(os_ops=os_ops)
 
@@ -804,13 +804,13 @@ class TestgresRemoteTests(unittest.TestCase):
             res_exec = node.execute('select 1')
             res_psql = node.safe_psql('select 1')
             self.assertEqual(res_exec, [(1,)])
-            self.assertEqual(res_psql, b'1\n')
+            self.assertEqual(res_psql, '1\n')
 
             with node.replicate().start() as r:
                 res_exec = r.execute('select 1')
                 res_psql = r.safe_psql('select 1')
                 self.assertEqual(res_exec, [(1,)])
-                self.assertEqual(res_psql, b'1\n')
+                self.assertEqual(res_psql, '1\n')
 
     def test_auto_name(self):
         with get_remote_node(conn_params=conn_params).init(allow_streaming=True).start() as m:

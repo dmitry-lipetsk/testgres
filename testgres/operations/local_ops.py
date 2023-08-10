@@ -36,7 +36,7 @@ class LocalOperations(OsOperations):
 
     # Command execution
     def exec_command(self, cmd, wait_exit=False, verbose=False,
-                     expect_error=False, encoding=None, shell=False, text=False,
+                     expect_error=False, encoding='utf-8', shell=False, text=False,
                      input=None, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, proc=None):
         """
         Execute a command in a subprocess.

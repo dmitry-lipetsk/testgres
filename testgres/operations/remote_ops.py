@@ -1,39 +1,36 @@
 import os
 import tempfile
 import time
-from typing import Optional
-
+import subprocess
 import sshtunnel
-
-import paramiko
-from paramiko import SSHClient
-
 from ..exceptions import ExecUtilException
-
-from .os_ops import OsOperations, ConnectionParams
-from .os_ops import pglib
+from .os_ops import OsOperations, ConnectionParams, pglib
 
 sshtunnel.SSH_TIMEOUT = 5.0
 sshtunnel.TUNNEL_TIMEOUT = 5.0
 
-
-error_markers = [b'error', b'Permission denied', b'fatal', b'No such file or directory']
+error_markers = ['error', 'Permission denied', 'fatal', 'No such file or directory']
 
 
 class PsUtilProcessProxy:
-    def __init__(self, ssh, pid):
-        self.ssh = ssh
+    def __init__(self, host, username, ssh_key, pid):
+        self.host = host
+        self.username = username
+        self.ssh_key = ssh_key
         self.pid = pid
+
+    def _run_command(self, command):
+        cmd = ["ssh", "-i", self.ssh_key, f"{self.username}@{self.host}", command]
+        return subprocess.run(cmd, capture_output=True, text=True)
 
     def kill(self):
         command = "kill {}".format(self.pid)
-        self.ssh.exec_command(command)
+        self._run_command(command)
 
     def cmdline(self):
         command = "ps -p {} -o cmd --no-headers".format(self.pid)
-        stdin, stdout, stderr = self.ssh.exec_command(command)
-        cmdline = stdout.read().decode('utf-8').strip()
-        return cmdline.split()
+        result = self._run_command(command)
+        return result.stdout.strip().split()
 
 
 class RemoteOperations(OsOperations):
@@ -42,7 +39,6 @@ class RemoteOperations(OsOperations):
         self.conn_params = conn_params
         self.host = conn_params.host
         self.ssh_key = conn_params.ssh_key
-        self.ssh = self.ssh_connect()
         self.remote = True
         self.username = conn_params.username or self.get_user()
         self.tunnel = None
@@ -50,14 +46,8 @@ class RemoteOperations(OsOperations):
     def __enter__(self):
         return self
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self):
         self.close_tunnel()
-        if getattr(self, 'ssh', None):
-            self.ssh.close()
-
-    def __del__(self):
-        if getattr(self, 'ssh', None):
-            self.ssh.close()
 
     def close_tunnel(self):
         if getattr(self, 'tunnel', None):
@@ -68,78 +58,73 @@ class RemoteOperations(OsOperations):
                     break
                 time.sleep(0.5)
 
-    def ssh_connect(self) -> Optional[SSHClient]:
-        key = self._read_ssh_key()
-        ssh = paramiko.SSHClient()
-        ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(self.host, username=self.username, pkey=key)
-        return ssh
+    def scp_upload(self, local_file: str, remote_file: str):
+        """Upload a file to a remote host using scp."""
+        command = [
+            "scp",
+            "-i", self.ssh_key,
+            local_file,
+            "{}@{}:{}".format(self.username, self.host, remote_file)
+        ]
+        subprocess.run(command, check=True)
 
-    def _read_ssh_key(self):
-        try:
-            with open(self.ssh_key, "r") as f:
-                key_data = f.read()
-                if "BEGIN OPENSSH PRIVATE KEY" in key_data:
-                    key = paramiko.Ed25519Key.from_private_key_file(self.ssh_key)
-                else:
-                    key = paramiko.RSAKey.from_private_key_file(self.ssh_key)
-                return key
-        except FileNotFoundError:
-            raise ExecUtilException(message="No such file or directory: '{}'".format(self.ssh_key))
-        except Exception as e:
-            ExecUtilException(message="An error occurred while reading the ssh key: {}".format(e))
+    def ssh_command(self, cmd) -> list:
+        """Prepare a command for SSH execution using subprocess."""
+        if isinstance(cmd, list):
+            base_cmd = [
+                           "ssh",
+                           "-i", self.ssh_key,
+                           "{}@{}".format(self.username, self.host)
+                       ] + cmd
+        else:
+            base_cmd = [
+                "ssh",
+                "-i", self.ssh_key,
+                "{}@{}".format(self.username, self.host),
+                cmd
+            ]
+        return base_cmd
 
     def exec_command(self, cmd: str, wait_exit=False, verbose=False, expect_error=False,
-                     encoding=None, shell=True, text=False, input=None, stdin=None, stdout=None,
+                     encoding='utf-8', shell=True, text=False, input=None, stdin=None, stdout=None,
                      stderr=None, proc=None):
         """
-        Execute a command in the SSH session.
+        Execute a command in the SSH session using subprocess.
         Args:
         - cmd (str): The command to be executed.
+        - encoding (str|None): 'utf-8' is default. If encoding=None, then return binary
         """
-        if self.ssh is None or not self.ssh.get_transport() or not self.ssh.get_transport().is_active():
-            self.ssh = self.ssh_connect()
+        command = self.ssh_command(cmd)
 
-        if isinstance(cmd, list):
-            cmd = ' '.join(item.decode('utf-8') if isinstance(item, bytes) else item for item in cmd)
-        if input:
-            stdin, stdout, stderr = self.ssh.exec_command(cmd)
-            stdin.write(input)
-            stdin.flush()
-        else:
-            stdin, stdout, stderr = self.ssh.exec_command(cmd)
-        exit_status = 0
-        if wait_exit:
-            exit_status = stdout.channel.recv_exit_status()
+        proc = subprocess.Popen(command, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                stderr=subprocess.PIPE, shell=True)
 
+        result, error = proc.communicate(input=input)
+
+        exit_status = proc.returncode
+
+        # Always decode result and error
         if encoding:
-            result = stdout.read().decode(encoding)
-            error = stderr.read().decode(encoding)
-        else:
-            result = stdout.read()
-            error = stderr.read()
+            result = result.decode(encoding)
+            error = error.decode(encoding)
 
-        if expect_error:
-            raise Exception(result, error)
-
-        if encoding:
-            error_found = exit_status != 0 or any(
-                marker.decode(encoding) in error for marker in error_markers)
-        else:
             error_found = exit_status != 0 or any(
                 marker in error for marker in error_markers)
+        else:
+            error_found = exit_status != 0 or any(
+                marker.encode() in error for marker in error_markers)
 
         if error_found:
             if exit_status == 0:
                 exit_status = 1
-            if encoding:
-                message = "Utility exited with non-zero code. Error: {}".format(error.decode(encoding))
+            if expect_error:  # If we expect an error, return the error details instead of raising an exception
+                return exit_status, result, error
             else:
-                message = b"Utility exited with non-zero code. Error: " + error
-            raise ExecUtilException(message=message,
-                                    command=cmd,
-                                    exit_code=exit_status,
-                                    out=result)
+                message = f"Utility exited with non-zero code. Error: {error}"
+                raise ExecUtilException(message=message,
+                                        command=cmd,
+                                        exit_code=exit_status,
+                                        out=result)
 
         if verbose:
             return exit_status, result, error
@@ -153,8 +138,8 @@ class RemoteOperations(OsOperations):
         Args:
         - var_name (str): The name of the environment variable.
         """
-        cmd = "echo ${}".format(var_name)
-        return self.exec_command(cmd, encoding='utf-8').strip()
+        cmd = "echo \${}".format(var_name)
+        return self.exec_command(cmd).strip()
 
     def find_executable(self, executable):
         search_paths = self.environ("PATH")
@@ -171,8 +156,11 @@ class RemoteOperations(OsOperations):
 
     def is_executable(self, file):
         # Check if the file is executable
-        is_exec = self.exec_command("test -x {} && echo OK".format(file))
-        return is_exec == b"OK\n"
+        try:
+            is_exec = self.exec_command("test -x {} && echo OK".format(file), expect_error=True)
+            return is_exec == "OK\n"
+        except ExecUtilException:
+            return False
 
     def set_env(self, var_name: str, var_val: str):
         """
@@ -185,11 +173,11 @@ class RemoteOperations(OsOperations):
 
     # Get environment variables
     def get_user(self):
-        return self.exec_command("echo $USER", encoding='utf-8').strip()
+        return self.exec_command("echo \$USER").strip()
 
     def get_name(self):
         cmd = 'python3 -c "import os; print(os.name)"'
-        return self.exec_command(cmd, encoding='utf-8').strip()
+        return self.exec_command(cmd).strip()
 
     # Work with dirs
     def makedirs(self, path, remove_existing=False):
@@ -236,7 +224,7 @@ class RemoteOperations(OsOperations):
         return result.splitlines()
 
     def path_exists(self, path):
-        result = self.exec_command("test -e {}; echo $?".format(path), encoding='utf-8')
+        result = self.exec_command("test -e {}; echo \$?".format(path))
         return int(result.strip()) == 0
 
     @property
@@ -257,9 +245,9 @@ class RemoteOperations(OsOperations):
         - prefix (str): The prefix of the temporary directory name.
         """
         if prefix:
-            temp_dir = self.exec_command("mktemp -d {}XXXXX".format(prefix), encoding='utf-8')
+            temp_dir = self.exec_command("mktemp -d {}XXXXX".format(prefix))
         else:
-            temp_dir = self.exec_command("mktemp -d", encoding='utf-8')
+            temp_dir = self.exec_command("mktemp -d")
 
         if temp_dir:
             if not os.path.isabs(temp_dir):
@@ -270,9 +258,9 @@ class RemoteOperations(OsOperations):
 
     def mkstemp(self, prefix=None):
         if prefix:
-            temp_dir = self.exec_command("mktemp {}XXXXX".format(prefix), encoding='utf-8')
+            temp_dir = self.exec_command("mktemp {}XXXXX".format(prefix))
         else:
-            temp_dir = self.exec_command("mktemp", encoding='utf-8')
+            temp_dir = self.exec_command("mktemp")
 
         if temp_dir:
             if not os.path.isabs(temp_dir):
@@ -291,17 +279,7 @@ class RemoteOperations(OsOperations):
     # Work with files
     def write(self, filename, data, truncate=False, binary=False, read_and_write=False, encoding='utf-8'):
         """
-        Write data to a file on a remote host
-
-        Args:
-        - filename (str): The file path where the data will be written.
-        - data (bytes or str): The data to be written to the file.
-        - truncate (bool): If True, the file will be truncated before writing ('w' or 'wb' option);
-                         if False (default), data will be appended ('a' or 'ab' option).
-        - binary (bool): If True, the data will be written in binary mode ('wb' or 'ab' option);
-                       if False (default), the data will be written in text mode ('w' or 'a' option).
-        - read_and_write (bool): If True, the file will be opened with read and write permissions ('r+' option);
-                               if False (default), only write permission will be used ('w', 'a', 'wb', or 'ab' option).
+        Write data to a file on a remote host using scp and subprocess.
         """
         mode = "wb" if binary else "w"
         if not truncate:
@@ -311,18 +289,15 @@ class RemoteOperations(OsOperations):
 
         with tempfile.NamedTemporaryFile(mode=mode, delete=False) as tmp_file:
             if not truncate:
-                with self.ssh_connect() as ssh:
-                    sftp = ssh.open_sftp()
-                    try:
-                        sftp.get(filename, tmp_file.name)
-                        tmp_file.seek(0, os.SEEK_END)
-                    except FileNotFoundError:
-                        pass  # File does not exist yet, we'll create it
-                    sftp.close()
+                # Download the remote file first
+                subprocess.run(self.ssh_command(f"cat {filename}"), stdout=tmp_file, check=False)
+                tmp_file.seek(0, os.SEEK_END)
+
             if isinstance(data, bytes) and not binary:
                 data = data.decode(encoding)
             elif isinstance(data, str) and binary:
                 data = data.encode(encoding)
+
             if isinstance(data, list):
                 # ensure each line ends with a newline
                 data = [(s if isinstance(s, str) else s.decode('utf-8')).rstrip('\n') + '\n' for s in data]
@@ -331,15 +306,8 @@ class RemoteOperations(OsOperations):
                 tmp_file.write(data)
             tmp_file.flush()
 
-            with self.ssh_connect() as ssh:
-                sftp = ssh.open_sftp()
-                remote_directory = os.path.dirname(filename)
-                try:
-                    sftp.stat(remote_directory)
-                except IOError:
-                    sftp.mkdir(remote_directory)
-                sftp.put(tmp_file.name, filename)
-                sftp.close()
+            # Upload the file back to the remote host
+            self.scp_upload(tmp_file.name, filename)
 
             os.remove(tmp_file.name)
 
@@ -354,13 +322,9 @@ class RemoteOperations(OsOperations):
         """
         self.exec_command("touch {}".format(filename))
 
-    def read(self, filename, binary=False, encoding=None):
+    def read(self, filename, encoding='utf-8'):
         cmd = "cat {}".format(filename)
         result = self.exec_command(cmd, encoding=encoding)
-
-        if not binary and result:
-            result = result.decode(encoding or 'utf-8')
-
         return result
 
     def readlines(self, filename, num_lines=0, binary=False, encoding=None):
@@ -379,14 +343,14 @@ class RemoteOperations(OsOperations):
         return lines
 
     def isfile(self, remote_file):
-        stdout = self.exec_command("test -f {}; echo $?".format(remote_file))
+        stdout = self.exec_command("test -f {}; echo \$?".format(remote_file))
         result = int(stdout.strip())
         return result == 0
 
     def isdir(self, dirname):
-        cmd = "if [ -d {} ]; then echo True; else echo False; fi".format(dirname)
+        cmd = "test -d {} && echo True || echo False".format(dirname)
         response = self.exec_command(cmd)
-        return response.strip() == b"True"
+        return response.strip() == "True"
 
     def remove_file(self, filename):
         cmd = "rm {}".format(filename)
@@ -400,13 +364,16 @@ class RemoteOperations(OsOperations):
 
     def get_pid(self):
         # Get current process id
-        return int(self.exec_command("echo $$", encoding='utf-8'))
+        return int(self.exec_command("echo \$$"))
 
     def get_process_children(self, pid):
-        command = "pgrep -P {}".format(pid)
-        stdin, stdout, stderr = self.ssh.exec_command(command)
-        children = stdout.readlines()
-        return [PsUtilProcessProxy(self.ssh, int(child_pid.strip())) for child_pid in children]
+        command = self.ssh_command(f"pgrep -P {pid}")
+
+        result = subprocess.run(command, capture_output=True, text=True, check=True)
+
+        children = result.stdout.splitlines()
+
+        return [PsUtilProcessProxy(int(child_pid.strip())) for child_pid in children]
 
     # Database control
     def db_connect(self, dbname, user, password=None, host="127.0.0.1", port=5432, ssh_key=None):
