@@ -52,7 +52,7 @@ def release_port(port):
     bound_ports.discard(port)
 
 
-def execute_utility(args, logfile=None, verbose=False):
+def execute_utility(args, logfile=None, verbose=False, check_time=False):
     """
     Execute utility (pg_ctl, pg_dump etc).
 
@@ -63,7 +63,12 @@ def execute_utility(args, logfile=None, verbose=False):
     Returns:
         stdout of executed utility.
     """
-    exit_status, out, error = tconf.os_ops.exec_command(args, verbose=True)
+    elapsed_time = 0
+    if check_time:
+        exit_status, out, error, elapsed_time = tconf.os_ops.exec_command(args, verbose=True, check_time=check_time)
+    else:
+        exit_status, out, error = tconf.os_ops.exec_command(args, verbose=True)
+
     # decode result
     out = '' if not out else out
     if isinstance(out, bytes):
@@ -82,9 +87,9 @@ def execute_utility(args, logfile=None, verbose=False):
         except IOError:
             raise ExecUtilException("Problem with writing to logfile `{}` during run command `{}`".format(logfile, args))
     if verbose:
-        return exit_status, out, error
+        return exit_status, out, error if not check_time else (exit_status, out, error, elapsed_time)
     else:
-        return out
+        return out if not check_time else (out, elapsed_time)
 
 
 def get_bin_path(filename):

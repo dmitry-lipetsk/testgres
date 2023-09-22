@@ -4,6 +4,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+import time
 
 import psutil
 
@@ -37,7 +38,7 @@ class LocalOperations(OsOperations):
     # Command execution
     def exec_command(self, cmd, wait_exit=False, verbose=False,
                      expect_error=False, encoding=None, shell=False, text=False,
-                     input=None, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, proc=None):
+                     input=None, stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE, proc=None, check_time=False):
         """
         Execute a command in a subprocess.
 
@@ -63,6 +64,7 @@ class LocalOperations(OsOperations):
                 result = buf.read().decode(encoding)
             return result
         else:
+            start_time = time.time()
             process = subprocess.Popen(
                 cmd,
                 shell=shell,
@@ -73,6 +75,9 @@ class LocalOperations(OsOperations):
                 return process
             result, error = process.communicate(input)
             exit_status = process.returncode
+
+            end_time = time.time()
+            elapsed_time = end_time - start_time
 
             error_found = exit_status != 0 or any(marker in error for marker in error_markers)
 
@@ -91,9 +96,15 @@ class LocalOperations(OsOperations):
                                         exit_code=exit_status,
                                         out=result)
             if verbose:
-                return exit_status, result, error
+                if check_time:
+                    return exit_status, result, error, elapsed_time
+                else:
+                    return exit_status, result, error
             else:
-                return result
+                if check_time:
+                    return result, elapsed_time
+                else:
+                    return result
 
     # Environment setup
     def environ(self, var_name):

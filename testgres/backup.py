@@ -33,7 +33,8 @@ class NodeBackup(object):
                  node,
                  base_dir=None,
                  username=None,
-                 xlog_method=XLogMethod.fetch):
+                 xlog_method=XLogMethod.fetch,
+                 check_time=False):
         """
         Create a new backup.
 
@@ -77,7 +78,11 @@ class NodeBackup(object):
             "-D", data_dir,
             "-X", xlog_method.value
         ]  # yapf: disable
-        execute_utility(_params, self.log_file)
+        if check_time:
+            out, self.elapsed_time = execute_utility(_params, self.log_file, verbose=False, check_time=check_time)
+        else:
+            execute_utility(_params, self.log_file, check_time)
+
 
     def __enter__(self):
         return self
