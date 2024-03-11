@@ -201,10 +201,6 @@ class Init(object):
         os.environ["PGAPPNAME"] = "pg_probackup"
         self.delete_logs = delete_logs
 
-        # s3 params
-        self.s3_config_file = test_env.get('PG_PROBACKUP_S3_CONFIG_FILE')
-        self.s3_type = test_env.get('PG_PROBACKUP_S3_TEST')
-
     def test_env(self):
         return self._test_env.copy()
 
