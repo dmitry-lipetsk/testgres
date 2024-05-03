@@ -432,6 +432,9 @@ class ProbackupApp:
             try:
                 if expect_error:
                     return text_json
+                index_of_bracket = text_json.find('[')
+                if index_of_bracket != -1:
+                    text_json = text_json[index_of_bracket:]
                 data = json.loads(text_json)
             except ValueError:
                 assert False, f"Couldn't parse {text_json} as json. " \
