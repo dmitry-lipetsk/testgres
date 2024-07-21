@@ -554,6 +554,9 @@ class ProbackupApp:
             # You should print it when calling as_text=true
             return self.run(cmd_list + options, old_binary=old_binary, expect_error=expect_error)
 
+        result = {}
+        instance_timelines = None
+
         if as_json:
             if as_text:
                 data = self.run(cmd_list + options, old_binary=old_binary, expect_error=expect_error)
@@ -561,28 +564,34 @@ class ProbackupApp:
                 data = json.loads(self.run(cmd_list + options, old_binary=old_binary, expect_error=expect_error))
 
             if instance:
-                instance_timelines = None
                 for instance_name in data:
                     if instance_name['instance'] == instance:
                         instance_timelines = instance_name['timelines']
                         break
 
                 if tli > 0:
+                    timeline_found = False
                     for timeline in instance_timelines:
                         if timeline['tli'] == tli:
-                            return timeline
+                            result = timeline
+                            timeline_found = True
+                            break
+                    if not timeline_found:
+                        result = {}
 
-                    return {}
-
-                if instance_timelines:
-                    return instance_timelines
-
-            return data
+                elif instance_timelines:
+                    result = instance_timelines
+                else:
+                    result = data
+            else:
+                result = data
         else:
-            show_splitted = self.run(cmd_list + options, old_binary=old_binary,
-                                     expect_error=expect_error).splitlines()
-            logging.error(show_splitted)
+            show_splitted = self.run(cmd_list + options, old_binary=old_binary, expect_error=expect_error).splitlines()
+            print(show_splitted)
             exit(1)
+        if result == {}:
+            print(f"tli={tli} was not found. {instance_timelines}")
+        return result
 
     def validate(
             self, instance=None, backup_id=None,
