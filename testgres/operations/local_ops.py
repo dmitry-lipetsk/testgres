@@ -314,5 +314,6 @@ class LocalOperations(OsOperations):
             database=dbname,
             user=user,
             password=password,
+            sslmode="disable",
         )
         return conn
