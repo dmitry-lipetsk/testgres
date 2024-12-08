@@ -153,7 +153,6 @@ class TestgresTests(unittest.TestCase):
 
         with scoped_config(cache_initdb=True,
                            cached_initdb_unique=True) as config:
-
             self.assertTrue(config.cache_initdb)
             self.assertTrue(config.cached_initdb_unique)
 
@@ -376,13 +375,11 @@ class TestgresTests(unittest.TestCase):
 
             with node.backup(xlog_method='fetch') as backup1, \
                     node.backup(xlog_method='fetch') as backup2:
-
                 self.assertNotEqual(backup1.base_dir, backup2.base_dir)
 
             with node.backup(xlog_method='fetch') as backup:
                 with backup.spawn_primary('node1', destroy=False) as node1, \
                         backup.spawn_primary('node2', destroy=False) as node2:
-
                     self.assertNotEqual(node1.base_dir, node2.base_dir)
 
     def test_backup_exhaust(self):
@@ -390,7 +387,6 @@ class TestgresTests(unittest.TestCase):
             node.init(allow_streaming=True).start()
 
             with node.backup(xlog_method='fetch') as backup:
-
                 # exhaust backup by creating new node
                 with backup.spawn_primary():
                     pass
@@ -501,7 +497,7 @@ class TestgresTests(unittest.TestCase):
             sub.disable()
             node1.safe_psql('insert into test values (3, 3)')
 
-            # enable and ensure that data successfully transfered
+            # enable and ensure that data successfully transferred
             sub.enable()
             sub.catchup()
             res = node2.execute('select * from test')
@@ -509,7 +505,7 @@ class TestgresTests(unittest.TestCase):
 
             # Add new tables. Since we added "all tables" to publication
             # (default behaviour of publish() method) we don't need
-            # to explicitely perform pub.add_tables()
+            # to explicitly perform pub.add_tables()
             create_table = 'create table test2 (c char)'
             node1.safe_psql(create_table)
             node2.safe_psql(create_table)
@@ -526,7 +522,7 @@ class TestgresTests(unittest.TestCase):
             pub.drop()
 
             # create new publication and subscription for specific table
-            # (ommitting copying data as it's already done)
+            # (omitting copying data as it's already done)
             pub = node1.publish('newpub', tables=['test'])
             sub = node2.subscribe(pub, 'newsub', copy_data=False)
 
@@ -535,7 +531,7 @@ class TestgresTests(unittest.TestCase):
             res = node2.execute('select * from test')
             self.assertListEqual(res, [(1, 1), (2, 2), (3, 3), (4, 4)])
 
-            # explicitely add table
+            # explicitly add table
             with self.assertRaises(ValueError):
                 pub.add_tables([])    # fail
             pub.add_tables(['test2'])
@@ -778,7 +774,6 @@ class TestgresTests(unittest.TestCase):
 
         # modify setting for this scope
         with scoped_config(cache_pg_config=False) as config:
-
             # sanity check for value
             self.assertFalse(config.cache_pg_config)
 
@@ -810,7 +805,6 @@ class TestgresTests(unittest.TestCase):
             self.assertEqual(c1.cached_initdb_dir, d1)
 
             with scoped_config(cached_initdb_dir=d2) as c2:
-
                 stack_size = len(testgres.config.config_stack)
 
                 # try to break a stack
@@ -840,7 +834,6 @@ class TestgresTests(unittest.TestCase):
     def test_auto_name(self):
         with get_new_node().init(allow_streaming=True).start() as m:
             with m.replicate().start() as r:
-
                 # check that nodes are running
                 self.assertTrue(m.status())
                 self.assertTrue(r.status())
@@ -1045,7 +1038,7 @@ class TestgresTests(unittest.TestCase):
                 node2._should_free_port = False
                 node2.init().start()
 
-    def test_make_simple_with_bin_dir(self):
+    def test_simple_with_bin_dir(self):
         with get_new_node() as node:
             node.init().start()
             bin_dir = node.bin_dir
@@ -1062,6 +1055,52 @@ class TestgresTests(unittest.TestCase):
             raise RuntimeError("Error was expected.")  # We should not reach this
         except FileNotFoundError:
             pass  # Expected error
+
+    def test_set_auto_conf(self):
+        # elements contain [property id, value, storage value]
+        testData = [
+            ["archive_command",
+             "cp '%p' \"/mnt/server/archivedir/%f\"",
+             "'cp \\'%p\\' \"/mnt/server/archivedir/%f\""],
+            ["restore_command",
+             'cp "/mnt/server/archivedir/%f" \'%p\'',
+             "'cp \"/mnt/server/archivedir/%f\" \\'%p\\''"],
+            ["log_line_prefix",
+             "'\n\r\t\b\\\"",
+             "'\\\'\\n\\r\\t\\b\\\\\""],
+            ["log_connections",
+             True,
+             "on"],
+            ["log_disconnections",
+             False,
+             "off"],
+            ["autovacuum_max_workers",
+             3,
+             "3"]
+        ]
+
+        with get_new_node() as node:
+            node.init().start()
+
+            options = {}
+
+            for x in testData:
+                options[x[0]] = x[1]
+
+            node.set_auto_conf(options)
+            node.stop()
+            node.slow_start()
+
+            auto_conf_path = f"{node.data_dir}/postgresql.auto.conf"
+            with open(auto_conf_path, "r") as f:
+                content = f.read()
+
+                for x in testData:
+                    self.assertIn(
+                        x[0] + " = " + x[2],
+                        content,
+                        x[0] + " stored wrong"
+                    )
 
 
 if __name__ == '__main__':

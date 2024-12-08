@@ -5,6 +5,7 @@ import random
 import signal
 import subprocess
 import threading
+import tempfile
 from queue import Queue
 
 import time
@@ -1161,7 +1162,7 @@ class PostgresNode(object):
             filename
         ]  # yapf: disable
 
-        # try pg_restore if dump is binary formate, and psql if not
+        # try pg_restore if dump is binary format, and psql if not
         try:
             execute_utility(_params, self.utils_log_name)
         except ExecUtilException:
@@ -1304,7 +1305,7 @@ class PostgresNode(object):
 
         Args:
             standbys: either :class:`.First` or :class:`.Any` object specifying
-                sychronization parameters or just a plain list of
+                synchronization parameters or just a plain list of
                 :class:`.PostgresNode`s replicas which would be equivalent
                 to passing ``First(1, <list>)``. For PostgreSQL 9.5 and below
                 it is only possible to specify a plain list of standbys as
@@ -1646,23 +1647,31 @@ class PostgresNode(object):
 
             name, var = line.partition('=')[::2]
             name = name.strip()
-            var = var.strip()
-            var = var.strip('"')
-            var = var.strip("'")
 
-            # remove options specified in rm_options list
+            # Remove options specified in rm_options list
             if name in rm_options:
                 continue
 
             current_options[name] = var
 
         for option in options:
-            current_options[option] = options[option]
+            assert type(option) == str  # noqa: E721
+            assert option != ""
+            assert option.strip() == option
+
+            value = options[option]
+            valueType = type(value)
+
+            if valueType == str:
+                value = __class__._escape_config_value(value)
+            elif valueType == bool:
+                value = "on" if value else "off"
+
+            current_options[option] = value
 
         auto_conf = ''
         for option in current_options:
-            auto_conf += "{0} = '{1}'\n".format(
-                option, current_options[option])
+            auto_conf += option + " = " + str(current_options[option]) + "\n"
 
         for directive in current_directives:
             auto_conf += directive + "\n"
@@ -1710,6 +1719,30 @@ class PostgresNode(object):
             bin_path = get_bin_path(filename)
         return bin_path
 
+    def _escape_config_value(value):
+        assert type(value) == str  # noqa: E721
+
+        result = "'"
+
+        for ch in value:
+            if ch == "'":
+                result += "\\'"
+            elif ch == "\n":
+                result += "\\n"
+            elif ch == "\r":
+                result += "\\r"
+            elif ch == "\t":
+                result += "\\t"
+            elif ch == "\b":
+                result += "\\b"
+            elif ch == "\\":
+                result += "\\\\"
+            else:
+                result += ch
+
+        result += "'"
+        return result
+
 
 class NodeApp:
 
@@ -1749,6 +1782,8 @@ class NodeApp:
             pg_options={},
             checksum=True,
             bin_dir=None):
+        assert type(pg_options) == dict  # noqa: E721
+
         if checksum and '--data-checksums' not in initdb_params:
             initdb_params.append('--data-checksums')
         node = self.make_empty(base_dir, port, bin_dir=bin_dir)
@@ -1761,20 +1796,22 @@ class NodeApp:
         node.major_version = float(node.major_version_str)
 
         # Set default parameters
-        options = {'max_connections': 100,
-                   'shared_buffers': '10MB',
-                   'fsync': 'off',
-                   'wal_level': 'logical',
-                   'hot_standby': 'off',
-                   'log_line_prefix': '%t [%p]: [%l-1] ',
-                   'log_statement': 'none',
-                   'log_duration': 'on',
-                   'log_min_duration_statement': 0,
-                   'log_connections': 'on',
-                   'log_disconnections': 'on',
-                   'restart_after_crash': 'off',
-                   'autovacuum': 'off',
-                   'unix_socket_directories': '/tmp'}
+        options = {
+            'max_connections': 100,
+            'shared_buffers': '10MB',
+            'fsync': 'off',
+            'wal_level': 'logical',
+            'hot_standby': 'off',
+            'log_line_prefix': '%t [%p]: [%l-1] ',
+            'log_statement': 'none',
+            'log_duration': 'on',
+            'log_min_duration_statement': 0,
+            'log_connections': 'on',
+            'log_disconnections': 'on',
+            'restart_after_crash': 'off',
+            'autovacuum': 'off',
+            # unix_socket_directories will be defined later
+        }
 
         # Allow replication in pg_hba.conf
         if set_replication:
@@ -1789,11 +1826,16 @@ class NodeApp:
         else:
             options['wal_keep_segments'] = '12'
 
-        # set default values
-        node.set_auto_conf(options)
-
         # Apply given parameters
-        node.set_auto_conf(pg_options)
+        for option_name, option_value in iteritems(pg_options):
+            options[option_name] = option_value
+
+        # Define delayed propertyes
+        if not ("unix_socket_directories" in options.keys()):
+            options["unix_socket_directories"] = __class__._gettempdir()
+
+        # Set config values
+        node.set_auto_conf(options)
 
         # kludge for testgres
         # https://github.com/postgrespro/testgres/issues/54
@@ -1802,3 +1844,26 @@ class NodeApp:
             node.set_auto_conf({}, 'postgresql.conf', ['wal_keep_segments'])
 
         return node
+
+    def _gettempdir():
+        v = tempfile.gettempdir()
+
+        #
+        # Paranoid checks
+        #
+        if type(v) != str:  # noqa: E721
+            __class__._raise_bugcheck("tempfile.gettempdir returned a value with type {0}.".format(type(v).__name__))
+
+        if v == "":
+            __class__._raise_bugcheck("tempfile.gettempdir returned an empty string.")
+
+        if not os.path.exists(v):
+            __class__._raise_bugcheck("tempfile.gettempdir returned a not exist path [{0}].".format(v))
+
+        # OK
+        return v
+
+    def _raise_bugcheck(msg):
+        assert type(msg) == str  # noqa: E721
+        assert msg != ""
+        raise Exception("[BUG CHECK] " + msg)
