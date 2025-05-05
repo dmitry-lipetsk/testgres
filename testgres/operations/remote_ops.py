@@ -654,6 +654,9 @@ class RemoteOperations(OsOperations):
         assert type(path) == str  # noqa: E721
         assert content is None or type(content) == bytes  # noqa: E721
 
+        # TODO: It is better to create a temp file directly in a directory
+        # of our target file
+
         tmp_path = self.mkstemp(prefix=consts.TMP_EXCLUSIVE_FILE)
 
         try:
