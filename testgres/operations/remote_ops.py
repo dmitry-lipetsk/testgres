@@ -6,6 +6,7 @@ import tempfile
 import io
 import logging
 import typing
+import uuid
 
 from ..exceptions import ExecUtilException
 from ..exceptions import InvalidOperationException
@@ -657,7 +658,9 @@ class RemoteOperations(OsOperations):
         # TODO: It is better to create a temp file directly in a directory
         # of our target file
 
-        tmp_path = self.mkstemp(prefix=consts.TMP_EXCLUSIVE_FILE)
+        prefix = consts.TMP_EXCLUSIVE_FILE + uuid.uuid4().hex + "--"
+
+        tmp_path = self.mkstemp(prefix=prefix)
 
         try:
             if content is not None:
@@ -667,6 +670,16 @@ class RemoteOperations(OsOperations):
             cmd = ["mv", "-n", tmp_path, path]
 
             self.exec_command(cmd)
+
+            #
+            # if the source file has not disappeared, then target
+            # file did already exist.
+            #
+            if self.path_exists(tmp_path):
+                raise IOError(
+                    "File '{}' was not created. It may already exist.".format(
+                        path,
+                    ))
         except Exception as e:
             os.remove(tmp_path)
             raise e
