@@ -545,4 +545,3 @@ class LocalOperations(OsOperations):
 
     def tempdir(self):
         return tempfile.gettempdir()
-
