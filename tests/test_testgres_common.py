@@ -1033,7 +1033,8 @@ class TestTestgresCommon:
         with __class__.helper__get_node(node_svc) as node1, __class__.helper__get_node(node_svc) as node2:
             node1.init(allow_logical=True)
             node1.start()
-            node2.init().start()
+            node2.init()
+            node2.start()
 
             create_table = 'create table test (a int, b int)'
             node1.safe_psql(create_table)
