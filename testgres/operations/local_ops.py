@@ -542,3 +542,7 @@ class LocalOperations(OsOperations):
             raise e
 
         os.close(fd)
+
+    def tempdir(self):
+        return tempfile.gettempdir()
+

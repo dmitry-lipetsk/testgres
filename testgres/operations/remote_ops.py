@@ -671,6 +671,29 @@ class RemoteOperations(OsOperations):
             os.remove(tmp_path)
             raise e
 
+    def tempdir(self):
+        command = ["mktemp", "-u", "-d"]
+
+        exec_exitcode, exec_output, exec_error = self.exec_command(command, verbose=True, encoding=get_default_encoding(), ignore_errors=True)
+
+        assert type(exec_exitcode) == int  # noqa: E721
+        assert type(exec_output) == str  # noqa: E721
+        assert type(exec_error) == str  # noqa: E721
+
+        if exec_exitcode != 0:
+            RaiseError.CommandExecutionError(
+                cmd=command,
+                exit_code=exec_exitcode,
+                message="Could not detect temporary directory.",
+                error=exec_error,
+                out=exec_output)
+
+        temp_dir = exec_output.strip()
+
+        root_temp_dir = os.path.dirname(temp_dir)
+
+        return root_temp_dir
+
     @staticmethod
     def _is_port_free__process_0(error: str) -> bool:
         assert type(error) == str  # noqa: E721
