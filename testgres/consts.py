@@ -10,6 +10,10 @@ TMP_DUMP = 'tgsd_'
 TMP_CACHE = 'tgsc_'
 TMP_BACKUP = 'tgsb_'
 
+TMP_TESTGRES = "testgres"
+
+TMP_TESTGRES_PORTS = TMP_TESTGRES + "/ports"
+
 # prefixes for temp files
 TMP_EXCLUSIVE_FILE = "tgef_"
 
