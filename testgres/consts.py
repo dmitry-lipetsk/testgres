@@ -10,6 +10,9 @@ TMP_DUMP = 'tgsd_'
 TMP_CACHE = 'tgsc_'
 TMP_BACKUP = 'tgsb_'
 
+# prefixes for temp files
+TMP_EXCLUSIVE_FILE = "tgef_"
+
 # path to control file
 XLOG_CONTROL_FILE = "global/pg_control"
 

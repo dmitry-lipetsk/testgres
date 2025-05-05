@@ -9,6 +9,7 @@ import typing
 
 from ..exceptions import ExecUtilException
 from ..exceptions import InvalidOperationException
+from .. import consts
 from .os_ops import OsOperations, ConnectionParams, get_default_encoding
 from .raise_error import RaiseError
 from .helpers import Helpers
@@ -648,6 +649,24 @@ class RemoteOperations(OsOperations):
             error=error,
             out=output
         )
+
+    def exclusive_creation(self, path: str, content: typing.Optional[bytes]):
+        assert type(path) == str  # noqa: E721
+        assert content is None or type(content) == bytes  # noqa: E721
+
+        tmp_path = self.mkstemp(prefix=consts.TMP_EXCLUSIVE_FILE)
+
+        try:
+            if content is not None:
+                self.write(tmp_path, data=content, binary=True)
+
+            # move file name to the new place
+            cmd = ["mv", "-n", tmp_path, path]
+
+            self.exec_command(cmd)
+        except Exception as e:
+            os.remove(tmp_path)
+            raise e
 
     @staticmethod
     def _is_port_free__process_0(error: str) -> bool:
