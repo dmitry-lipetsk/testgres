@@ -1175,6 +1175,6 @@ class TestOsOpsCommon:
 
         actual_dir = os_ops.tempdir()
         assert actual_dir is not None
-        assert type(actual_dir) == str
+        assert type(actual_dir) == str  # noqa: E721
         expected_dir = str(tempfile.tempdir)
         assert actual_dir == expected_dir
