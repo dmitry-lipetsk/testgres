@@ -53,7 +53,6 @@ class OsOperations:
     def makedirs(self, path, remove_existing=False):
         raise NotImplementedError()
 
-    # Work with dirs
     def makedir(self, path: str):
         assert type(path) == str  # noqa: E721
         raise NotImplementedError()
