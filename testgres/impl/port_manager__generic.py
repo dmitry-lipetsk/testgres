@@ -68,7 +68,6 @@ class PortManager__Generic(PortManager):
 
                 assert port in self._reserved_ports
                 self._available_ports.discard(port)
-                assert port in self._reserved_ports
                 assert not (port in self._available_ports)
                 return port
 
