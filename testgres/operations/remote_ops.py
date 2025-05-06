@@ -672,7 +672,7 @@ class RemoteOperations(OsOperations):
             RaiseError.CommandExecutionError(
                 cmd=command,
                 exit_code=exec_exitcode,
-                message="Could not detect temporary directory.",
+                message="Could not detect a temporary directory.",
                 error=exec_error,
                 out=exec_output)
 
