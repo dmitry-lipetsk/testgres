@@ -131,5 +131,5 @@ class OsOperations:
         assert type(number) == int  # noqa: E721
         raise NotImplementedError()
 
-    def tempdir(self):
+    def get_tempdir(self) -> str:
         raise NotImplementedError()

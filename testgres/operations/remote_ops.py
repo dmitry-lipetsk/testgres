@@ -659,10 +659,15 @@ class RemoteOperations(OsOperations):
             out=output
         )
 
-    def tempdir(self):
+    def get_tempdir(self) -> str:
         command = ["mktemp", "-u", "-d"]
 
-        exec_exitcode, exec_output, exec_error = self.exec_command(command, verbose=True, encoding=get_default_encoding(), ignore_errors=True)
+        exec_exitcode, exec_output, exec_error = self.exec_command(
+            command,
+            verbose=True,
+            encoding=get_default_encoding(),
+            ignore_errors=True
+        )
 
         assert type(exec_exitcode) == int  # noqa: E721
         assert type(exec_output) == str  # noqa: E721
@@ -676,11 +681,11 @@ class RemoteOperations(OsOperations):
                 error=exec_error,
                 out=exec_output)
 
-        temp_dir = exec_output.strip()
-
-        root_temp_dir = os.path.dirname(temp_dir)
-
-        return root_temp_dir
+        temp_subdir = exec_output.strip()
+        assert type(temp_subdir) == str  # noqa: E721
+        temp_dir = os.path.dirname(temp_subdir)
+        assert type(temp_dir) == str  # noqa: E721
+        return temp_dir
 
     @staticmethod
     def _is_port_free__process_0(error: str) -> bool:

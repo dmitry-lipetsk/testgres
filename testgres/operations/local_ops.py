@@ -529,5 +529,9 @@ class LocalOperations(OsOperations):
             except OSError:
                 return False
 
-    def tempdir(self):
-        return tempfile.gettempdir()
+    def get_tempdir(self) -> str:
+        r = tempfile.gettempdir()
+        assert r is not None
+        assert type(r) == str  # noqa: E721
+        assert os.path.exists(r)
+        return r

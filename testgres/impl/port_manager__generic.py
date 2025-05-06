@@ -27,7 +27,8 @@ class PortManager__Generic(PortManager):
         self._available_ports: typing.Set[int] = set(range(1024, 65535))
         self._reserved_ports: typing.Set[int] = set()
 
-        temp_dir = os_ops.tempdir()
+        temp_dir = os_ops.get_tempdir()
+        assert type(temp_dir) == str  # noqa: E721
         self._lock_dir = os.path.join(temp_dir, consts.TMP_TESTGRES_PORTS)
         assert type(self._lock_dir) == str  # noqa: E721
         os_ops.makedirs(self._lock_dir)
