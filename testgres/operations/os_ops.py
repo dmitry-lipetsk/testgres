@@ -55,7 +55,8 @@ class OsOperations:
         raise NotImplementedError()
 
     # Work with dirs
-    def makedir(self, path):
+    def makedir(self, path: str):
+        assert type(path) == str  # noqa: E721
         raise NotImplementedError()
 
     def rmdirs(self, path, ignore_errors=True):
