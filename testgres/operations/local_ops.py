@@ -529,27 +529,5 @@ class LocalOperations(OsOperations):
             except OSError:
                 return False
 
-    def exclusive_creation(self, path: str, content: typing.Optional[bytes]):
-        assert type(path) == str  # noqa: E721
-        assert content is None or type(content) == bytes  # noqa: E721
-
-        # A target folder is prepared.
-        # What happens if we copy to the root folder?
-        path_a = os.path.abspath(path)
-        os.makedirs(os.path.dirname(path_a), exist_ok=True)
-
-        # Move file name to the new place
-        fd = os.open(path_a, flags=os.O_CREAT | os.O_WRONLY | os.O_EXCL)
-
-        try:
-            if content is not None:
-                os.write(fd, content)
-        except Exception as e:
-            os.close(fd)
-            os.remove(path_a)
-            raise e
-
-        os.close(fd)
-
     def tempdir(self):
         return tempfile.gettempdir()

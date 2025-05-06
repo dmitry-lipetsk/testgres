@@ -1,6 +1,5 @@
 import getpass
 import locale
-import typing
 
 
 class ConnectionParams:
@@ -131,11 +130,6 @@ class OsOperations:
 
     def is_port_free(self, number: int):
         assert type(number) == int  # noqa: E721
-        raise NotImplementedError()
-
-    def exclusive_creation(self, path: str, content: typing.Optional[bytes]):
-        assert type(path) == str  # noqa: E721
-        assert content is None or type(content) == bytes  # noqa: E721
         raise NotImplementedError()
 
     def tempdir(self):

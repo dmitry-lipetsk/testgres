@@ -6,11 +6,9 @@ import tempfile
 import io
 import logging
 import typing
-import uuid
 
 from ..exceptions import ExecUtilException
 from ..exceptions import InvalidOperationException
-from .. import consts
 from .os_ops import OsOperations, ConnectionParams, get_default_encoding
 from .raise_error import RaiseError
 from .helpers import Helpers
@@ -660,39 +658,6 @@ class RemoteOperations(OsOperations):
             error=error,
             out=output
         )
-
-    def exclusive_creation(self, path: str, content: typing.Optional[bytes]):
-        assert type(path) == str  # noqa: E721
-        assert content is None or type(content) == bytes  # noqa: E721
-
-        # TODO: It is better to create a temp file directly in a directory
-        # of our target file
-
-        prefix = consts.TMP_EXCLUSIVE_FILE + uuid.uuid4().hex + "--"
-
-        tmp_path = self.mkstemp(prefix=prefix)
-
-        try:
-            if content is not None:
-                self.write(tmp_path, data=content, binary=True)
-
-            # move file name to the new place
-            cmd = ["mv", "-n", tmp_path, path]
-
-            self.exec_command(cmd)
-
-            #
-            # if the source file has not disappeared, then target
-            # file did already exist.
-            #
-            if self.path_exists(tmp_path):
-                raise IOError(
-                    "File '{}' was not created. It may already exist.".format(
-                        path,
-                    ))
-        except Exception as e:
-            os.remove(tmp_path)
-            raise e
 
     def tempdir(self):
         command = ["mktemp", "-u", "-d"]

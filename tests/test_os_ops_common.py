@@ -5,7 +5,6 @@ from .helpers.global_data import OsOperations
 from .helpers.run_conditions import RunConditions
 
 import os
-import fcntl
 
 import pytest
 import re
@@ -818,366 +817,6 @@ class TestOsOpsCommon:
         if ok_count == 0:
             raise RuntimeError("No one free port was found.")
 
-    def test_file_op_research__creat_rdrw_excl(self):
-        tmp_dir = tempfile.tempdir
-        assert type(tmp_dir) == str  # noqa: E721
-
-        file_name = "testgres-test_file_op_research__creat_rdrw-" + uuid.uuid4().hex + ".lock"
-
-        file_path = os.path.join(tmp_dir, file_name)
-
-        logging.info("test file is [{}].".format(file_path))
-
-        fd = os.open(file_path, flags=os.O_CREAT | os.O_RDWR | os.O_EXCL)
-        assert type(fd) == int  # noqa: E721
-
-        assert os.path.exists(file_path)
-
-        try:
-            try:
-                logging.info("set O_EXCL")
-                fcntl.flock(fd, fcntl.LOCK_EX)
-
-                # 1234567890
-                file_content_b = os.read(fd, 11)
-                assert len(file_content_b) <= 10
-                assert type(file_content_b) == bytes  # noqa: E721
-                file_content = file_content_b.decode()
-                assert file_content == ""
-                os.write(fd, b"123")
-                os.lseek(fd, 0, 0)
-                file_content = os.read(fd, 11).decode()
-                assert file_content == "123"
-
-                logging.info("try #100")
-                with pytest.raises(expected_exception=Exception) as x:
-                    os.open(file_path, flags=os.O_CREAT | os.O_RDWR | os.O_EXCL)
-
-                logging.info("exception: {}".format(str(x.value)))
-
-                # --------
-                logging.info("try #101")
-                fd2 = os.open(file_path, flags=os.O_RDWR)
-
-                with pytest.raises(expected_exception=Exception) as x:
-                    fcntl.flock(fd2, fcntl.LOCK_EX | fcntl.LOCK_NB)
-
-                os.close(fd2)
-
-                logging.info("exception: {}".format(str(x.value)))
-            finally:
-                os.close(fd)
-
-            logging.info("try #200")
-            with pytest.raises(expected_exception=Exception) as x:
-                os.open(file_path, flags=os.O_CREAT | os.O_RDWR | os.O_EXCL)
-
-            logging.info("exception: {}".format(str(x.value)))
-
-        finally:
-            assert os.path.exists(file_path)
-            os.remove(file_path)
-            assert not os.path.exists(file_path)
-
-    def test_exclusive_creation(self, os_ops: OsOperations):
-        assert isinstance(os_ops, OsOperations)
-
-        data = uuid.uuid4().hex
-
-        data_b = data.encode()
-
-        file_path = "/tmp/testgres/tests/" + data + ".lock"
-
-        logging.info("A lock file [{}] is creating ...".format(file_path))
-
-        os_ops.exclusive_creation(file_path, data_b)
-
-        assert os_ops.path_exists(file_path)
-
-        actual_data_b = os_ops.read_binary(file_path, offset=0)
-
-        assert data_b == actual_data_b
-
-        logging.info("A lock file is created")
-
-        logging.info("Wa are trying to override this lock file ...")
-
-        with pytest.raises(expected_exception=Exception) as x:
-            os_ops.exclusive_creation(file_path, b'aaaaa')
-
-        logging.info("exception ({}): {}".format(type(x.value).__name__, str(x.value)))
-
-        # ---------
-        assert os_ops.path_exists(file_path)
-
-        actual_data_b = os_ops.read_binary(file_path, offset=0)
-
-        assert data_b == actual_data_b
-
-        # ---------
-        os_ops.remove_file(file_path)
-
-        assert not os_ops.path_exists(file_path)
-
-    class tagData_OS_OPS__NUMS:
-        os_ops_descr: OsOpsDescr
-        nums: int
-
-        def __init__(self, os_ops_descr: OsOpsDescr, nums: int):
-            assert isinstance(os_ops_descr, OsOpsDescr)
-            assert type(nums) == int  # noqa: E721
-
-            self.os_ops_descr = os_ops_descr
-            self.nums = nums
-
-    sm_test_exclusive_creation__mt__data = [
-        tagData_OS_OPS__NUMS(OsOpsDescrs.sm_local_os_ops_descr, 100000),
-        tagData_OS_OPS__NUMS(OsOpsDescrs.sm_remote_os_ops_descr, 120),
-    ]
-
-    @pytest.fixture(
-        params=sm_test_exclusive_creation__mt__data,
-        ids=[x.os_ops_descr.sign for x in sm_test_exclusive_creation__mt__data]
-    )
-    def data001(self, request: pytest.FixtureRequest) -> tagData_OS_OPS__NUMS:
-        assert isinstance(request, pytest.FixtureRequest)
-        return request.param
-
-    def test_exclusive_creation__mt(self, data001: tagData_OS_OPS__NUMS):
-        assert type(data001) == __class__.tagData_OS_OPS__NUMS   # noqa: E721
-
-        N_WORKERS = 4
-        N_NUMBERS = data001.nums
-        assert type(N_NUMBERS) == int  # noqa: E721
-
-        os_ops = data001.os_ops_descr.os_ops
-        assert isinstance(os_ops, OsOperations)
-
-        lock_dir_prefix = "test_exclusive_creation--" + uuid.uuid4().hex
-
-        lock_dir = os_ops.mkdtemp(prefix=lock_dir_prefix)
-
-        logging.info("A lock file [{}] is creating ...".format(lock_dir))
-
-        assert os.path.exists(lock_dir)
-
-        def MAKE_PATH(lock_dir: str, num: int) -> str:
-            assert type(lock_dir) == str  # noqa: E721
-            assert type(num) == int  # noqa: E721
-            return os.path.join(lock_dir, str(num) + ".lock")
-
-        def MAKE_CONTENT(workerID: int, number: int) -> bytes:
-            return (str(workerID) + "--" + str(number)).encode()
-
-        def LOCAL_WORKER(os_ops: OsOperations,
-                         workerID: int,
-                         lock_dir: str,
-                         cNumbers: int,
-                         reservedNumbers: typing.Set[int]) -> None:
-            assert isinstance(os_ops, OsOperations)
-            assert type(workerID) == int  # noqa: E721
-            assert type(lock_dir) == str  # noqa: E721
-            assert type(cNumbers) == int  # noqa: E721
-            assert type(reservedNumbers) == set  # noqa: E721
-            assert cNumbers > 0
-            assert len(reservedNumbers) == 0
-
-            assert os.path.exists(lock_dir)
-
-            def LOG_INFO(template: str, *args: list) -> None:
-                assert type(template) == str  # noqa: E721
-                assert type(args) == tuple  # noqa: E721
-
-                msg = template.format(*args)
-                assert type(msg) == str  # noqa: E721
-
-                logging.info("[Worker #{}] {}".format(workerID, msg))
-                return
-
-            LOG_INFO("HELLO! I am here!")
-
-            for num in range(cNumbers):
-                assert not (num in reservedNumbers)
-
-                file_path = MAKE_PATH(lock_dir, num)
-
-                content = MAKE_CONTENT(workerID, num)
-
-                try:
-                    os_ops.exclusive_creation(file_path, content)
-                except Exception as e:
-                    LOG_INFO(
-                        "Can't reserve {}. Error ({}): {}",
-                        num,
-                        type(e).__name__,
-                        str(e)
-                    )
-                    continue
-
-                LOG_INFO("Number {} is reserved!", num)
-                assert os_ops.path_exists(file_path)
-                reservedNumbers.add(num)
-                continue
-
-            n_total = cNumbers
-            n_ok = len(reservedNumbers)
-            assert n_ok <= n_total
-
-            LOG_INFO("Finish! OK: {}. FAILED: {}.", n_ok, n_total - n_ok)
-            return
-
-        # -----------------------
-        logging.info("Worker are creating ...")
-
-        threadPool = ThreadPoolExecutor(
-            max_workers=N_WORKERS,
-            thread_name_prefix="ex_creator"
-        )
-
-        class tadWorkerData:
-            future: ThreadFuture
-            reservedNumbers: typing.Set[int]
-
-        workerDatas: typing.List[tadWorkerData] = list()
-
-        nErrors = 0
-
-        try:
-            for n in range(N_WORKERS):
-                logging.info("worker #{} is creating ...".format(n))
-
-                workerDatas.append(tadWorkerData())
-
-                workerDatas[n].reservedNumbers = set()
-
-                workerDatas[n].future = threadPool.submit(
-                    LOCAL_WORKER,
-                    os_ops,
-                    n,
-                    lock_dir,
-                    N_NUMBERS,
-                    workerDatas[n].reservedNumbers
-                )
-
-                assert workerDatas[n].future is not None
-
-            logging.info("OK. All the workers were created!")
-        except Exception as e:
-            nErrors += 1
-            logging.error("A problem is detected ({}): {}".format(type(e).__name__, str(e)))
-
-        logging.info("Will wait for stop of all the workers...")
-
-        nWorkers = 0
-
-        assert type(workerDatas) == list  # noqa: E721
-
-        for i in range(len(workerDatas)):
-            worker = workerDatas[i].future
-
-            if worker is None:
-                continue
-
-            nWorkers += 1
-
-            assert isinstance(worker, ThreadFuture)
-
-            try:
-                logging.info("Wait for worker #{}".format(i))
-                worker.result()
-            except Exception as e:
-                nErrors += 1
-                logging.error("Worker #{} finished with error ({}): {}".format(
-                    i,
-                    type(e).__name__,
-                    str(e),
-                ))
-            continue
-
-        assert nWorkers == N_WORKERS
-
-        if nErrors != 0:
-            raise RuntimeError("Some problems were detected. Please examine the log messages.")
-
-        logging.info("OK. Let's check worker results!")
-
-        reservedNumbers: typing.Dict[int, int] = dict()
-
-        for i in range(N_WORKERS):
-            logging.info("Worker #{} is checked ...".format(i))
-
-            workerNumbers = workerDatas[i].reservedNumbers
-            assert type(workerNumbers) == set  # noqa: E721
-
-            for n in workerNumbers:
-                if n < 0 or n >= N_NUMBERS:
-                    nErrors += 1
-                    logging.error("Unexpected number {}".format(n))
-                    continue
-
-                if n in reservedNumbers.keys():
-                    nErrors += 1
-                    logging.error("Number {} was already reserved by worker #{}".format(
-                        n,
-                        reservedNumbers[n]
-                    ))
-                else:
-                    reservedNumbers[n] = i
-
-                file_path = MAKE_PATH(lock_dir, n)
-                if not os_ops.path_exists(file_path):
-                    nErrors += 1
-                    logging.error("File {} is not found!".format(file_path))
-                    continue
-
-                expectedContent = MAKE_CONTENT(i, n)
-                actualContent = os_ops.read_binary(file_path, offset=0)
-                if actualContent != expectedContent:
-                    nErrors += 1
-                    logging.error("File {} has bad content [{}]. Expected content is [{}].".format(
-                        file_path,
-                        actualContent,
-                        expectedContent))
-
-                continue
-
-        logging.info("OK. Let's check reservedNumbers!")
-
-        for n in range(N_NUMBERS):
-            if not (n in reservedNumbers.keys()):
-                nErrors += 1
-                logging.error("Number {} is not reserved!".format(n))
-                continue
-
-            ownerID = reservedNumbers[n]
-
-            file_path = MAKE_PATH(lock_dir, n)
-            if not os_ops.path_exists(file_path):
-                nErrors += 1
-                logging.error("File {} is not found!".format(file_path))
-                continue
-
-            expectedContent = MAKE_CONTENT(ownerID, n)
-            actualContent = os_ops.read_binary(file_path, offset=0)
-            if actualContent != expectedContent:
-                nErrors += 1
-                logging.error("File {} has bad content [{}]. Expected content is [{}].".format(
-                    file_path,
-                    actualContent,
-                    expectedContent))
-                continue
-
-            # OK!
-            continue
-
-        logging.info("Verification is finished! Error count is {}.".format(nErrors))
-
-        if nErrors == 0:
-            logging.info("Test folder will be deleted!")
-            os_ops.rmdirs(lock_dir)
-
-        return
-
     def test_tmpdir(self, os_ops: OsOperations):
         assert isinstance(os_ops, OsOperations)
 
@@ -1210,6 +849,30 @@ class TestOsOpsCommon:
         assert type(actual_dir) == str  # noqa: E721
         expected_dir = str(tempfile.tempdir)
         assert actual_dir == expected_dir
+
+    class tagData_OS_OPS__NUMS:
+        os_ops_descr: OsOpsDescr
+        nums: int
+
+        def __init__(self, os_ops_descr: OsOpsDescr, nums: int):
+            assert isinstance(os_ops_descr, OsOpsDescr)
+            assert type(nums) == int  # noqa: E721
+
+            self.os_ops_descr = os_ops_descr
+            self.nums = nums
+
+    sm_test_exclusive_creation__mt__data = [
+        tagData_OS_OPS__NUMS(OsOpsDescrs.sm_local_os_ops_descr, 100000),
+        tagData_OS_OPS__NUMS(OsOpsDescrs.sm_remote_os_ops_descr, 120),
+    ]
+
+    @pytest.fixture(
+        params=sm_test_exclusive_creation__mt__data,
+        ids=[x.os_ops_descr.sign for x in sm_test_exclusive_creation__mt__data]
+    )
+    def data001(self, request: pytest.FixtureRequest) -> tagData_OS_OPS__NUMS:
+        assert isinstance(request, pytest.FixtureRequest)
+        return request.param
 
     def test_mkdir__mt(self, data001: tagData_OS_OPS__NUMS):
         assert type(data001) == __class__.tagData_OS_OPS__NUMS   # noqa: E721

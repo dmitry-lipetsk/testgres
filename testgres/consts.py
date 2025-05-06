@@ -14,9 +14,6 @@ TMP_TESTGRES = "testgres"
 
 TMP_TESTGRES_PORTS = TMP_TESTGRES + "/ports"
 
-# prefixes for temp files
-TMP_EXCLUSIVE_FILE = "tgef_"
-
 # path to control file
 XLOG_CONTROL_FILE = "global/pg_control"
 
