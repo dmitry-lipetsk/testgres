@@ -297,6 +297,10 @@ class LocalOperations(OsOperations):
             # OK!
             return True
 
+    def rmdir(self, path: str):
+        assert type(path) == str  # noqa: E721
+        os.rmdir(path)
+
     def listdir(self, path):
         return os.listdir(path)
 

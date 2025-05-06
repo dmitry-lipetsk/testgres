@@ -62,6 +62,10 @@ class OsOperations:
     def rmdirs(self, path, ignore_errors=True):
         raise NotImplementedError()
 
+    def rmdir(self, path: str):
+        assert type(path) == str  # noqa: E721
+        raise NotImplementedError()
+
     def listdir(self, path):
         raise NotImplementedError()
 

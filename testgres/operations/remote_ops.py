@@ -272,6 +272,11 @@ class RemoteOperations(OsOperations):
             return False
         return True
 
+    def rmdir(self, path: str):
+        assert type(path) == str  # noqa: E721
+        cmd = ["rmdir", path]
+        self.exec_command(cmd)
+
     def listdir(self, path):
         """
         List all files and directories in a directory.

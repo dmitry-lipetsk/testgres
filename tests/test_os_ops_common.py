@@ -1412,10 +1412,41 @@ class TestOsOpsCommon:
             # OK!
             continue
 
-        logging.info("Verification is finished! Error count is {}.".format(nErrors))
+        logging.info("Verification is finished! Total error count is {}.".format(nErrors))
 
         if nErrors == 0:
-            logging.info("Test folder will be deleted!")
-            os_ops.rmdirs(lock_dir)
+            logging.info("Root lock-directory [{}] will be deleted.".format(
+                lock_dir
+            ))
 
+            for n in range(N_NUMBERS):
+                file_path = MAKE_PATH(lock_dir, n)
+                try:
+                    os_ops.rmdir(file_path)
+                except Exception as e:
+                    nErrors += 1
+                    logging.error("Cannot delete directory [{}]. Error ({}): {}".format(
+                        file_path,
+                        type(e).__name__,
+                        str(e)
+                    ))
+                    continue
+
+                if os_ops.path_exists(file_path):
+                    nErrors += 1
+                    logging.error("Directory {} is not deleted!".format(file_path))
+                    continue
+
+            if nErrors == 0:
+                try:
+                    os_ops.rmdir(lock_dir)
+                except Exception as e:
+                    nErrors += 1
+                    logging.error("Cannot delete directory [{}]. Error ({}): {}".format(
+                        lock_dir,
+                        type(e).__name__,
+                        str(e)
+                    ))
+
+        logging.info("Test is finished! Total error count is {}.".format(nErrors))
         return
