@@ -966,6 +966,9 @@ class TestOsOpsCommon:
             assert type(num) == int  # noqa: E721
             return os.path.join(lock_dir, str(num) + ".lock")
 
+        def MAKE_CONTENT(workerID: int, number: int) -> bytes:
+            return (str(workerID) + "--" + str(number)).encode()
+
         def LOCAL_WORKER(os_ops: OsOperations,
                          workerID: int,
                          lock_dir: str,
@@ -998,8 +1001,10 @@ class TestOsOpsCommon:
 
                 file_path = MAKE_PATH(lock_dir, num)
 
+                content = MAKE_CONTENT(workerID, num)
+
                 try:
-                    os_ops.exclusive_creation(file_path, str(num).encode())
+                    os_ops.exclusive_creation(file_path, content)
                 except Exception as e:
                     LOG_INFO(
                         "Can't reserve {}. Error ({}): {}",
@@ -1118,6 +1123,22 @@ class TestOsOpsCommon:
                     ))
                 else:
                     reservedNumbers[n] = i
+
+                file_path = MAKE_PATH(lock_dir, n)
+                if not os_ops.path_exists(file_path):
+                    nErrors += 1
+                    logging.error("File {} is not found!".format(file_path))
+                    continue
+
+                expectedContent = MAKE_CONTENT(i, n)
+                actualContent = os_ops.read_binary(file_path, offset=0)
+                if actualContent != expectedContent:
+                    nErrors += 1
+                    logging.error("File {} has bad content [{}]. Expected content is [{}].".format(
+                        file_path,
+                        actualContent,
+                        expectedContent))
+
                 continue
 
         logging.info("OK. Let's check reservedNumbers!")
@@ -1128,11 +1149,22 @@ class TestOsOpsCommon:
                 logging.error("Number {} is not reserved!".format(n))
                 continue
 
-            file_path = MAKE_PATH(lock_dir, n)
+            ownerID = reservedNumbers[n]
 
+            file_path = MAKE_PATH(lock_dir, n)
             if not os_ops.path_exists(file_path):
                 nErrors += 1
                 logging.error("File {} is not found!".format(file_path))
+                continue
+
+            expectedContent = MAKE_CONTENT(ownerID, n)
+            actualContent = os_ops.read_binary(file_path, offset=0)
+            if actualContent != expectedContent:
+                nErrors += 1
+                logging.error("File {} has bad content [{}]. Expected content is [{}].".format(
+                    file_path,
+                    actualContent,
+                    expectedContent))
                 continue
 
             # OK!
