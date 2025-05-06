@@ -1210,3 +1210,212 @@ class TestOsOpsCommon:
         assert type(actual_dir) == str  # noqa: E721
         expected_dir = str(tempfile.tempdir)
         assert actual_dir == expected_dir
+
+    def test_mkdir__mt(self, data001: tagData_OS_OPS__NUMS):
+        assert type(data001) == __class__.tagData_OS_OPS__NUMS   # noqa: E721
+
+        N_WORKERS = 4
+        N_NUMBERS = data001.nums
+        assert type(N_NUMBERS) == int  # noqa: E721
+
+        os_ops = data001.os_ops_descr.os_ops
+        assert isinstance(os_ops, OsOperations)
+
+        lock_dir_prefix = "test_mkdir_mt--" + uuid.uuid4().hex
+
+        lock_dir = os_ops.mkdtemp(prefix=lock_dir_prefix)
+
+        logging.info("A lock file [{}] is creating ...".format(lock_dir))
+
+        assert os.path.exists(lock_dir)
+
+        def MAKE_PATH(lock_dir: str, num: int) -> str:
+            assert type(lock_dir) == str  # noqa: E721
+            assert type(num) == int  # noqa: E721
+            return os.path.join(lock_dir, str(num) + ".lock")
+
+        def LOCAL_WORKER(os_ops: OsOperations,
+                         workerID: int,
+                         lock_dir: str,
+                         cNumbers: int,
+                         reservedNumbers: typing.Set[int]) -> None:
+            assert isinstance(os_ops, OsOperations)
+            assert type(workerID) == int  # noqa: E721
+            assert type(lock_dir) == str  # noqa: E721
+            assert type(cNumbers) == int  # noqa: E721
+            assert type(reservedNumbers) == set  # noqa: E721
+            assert cNumbers > 0
+            assert len(reservedNumbers) == 0
+
+            assert os.path.exists(lock_dir)
+
+            def LOG_INFO(template: str, *args: list) -> None:
+                assert type(template) == str  # noqa: E721
+                assert type(args) == tuple  # noqa: E721
+
+                msg = template.format(*args)
+                assert type(msg) == str  # noqa: E721
+
+                logging.info("[Worker #{}] {}".format(workerID, msg))
+                return
+
+            LOG_INFO("HELLO! I am here!")
+
+            for num in range(cNumbers):
+                assert not (num in reservedNumbers)
+
+                file_path = MAKE_PATH(lock_dir, num)
+
+                try:
+                    os_ops.makedir(file_path)
+                except Exception as e:
+                    LOG_INFO(
+                        "Can't reserve {}. Error ({}): {}",
+                        num,
+                        type(e).__name__,
+                        str(e)
+                    )
+                    continue
+
+                LOG_INFO("Number {} is reserved!", num)
+                assert os_ops.path_exists(file_path)
+                reservedNumbers.add(num)
+                continue
+
+            n_total = cNumbers
+            n_ok = len(reservedNumbers)
+            assert n_ok <= n_total
+
+            LOG_INFO("Finish! OK: {}. FAILED: {}.", n_ok, n_total - n_ok)
+            return
+
+        # -----------------------
+        logging.info("Worker are creating ...")
+
+        threadPool = ThreadPoolExecutor(
+            max_workers=N_WORKERS,
+            thread_name_prefix="ex_creator"
+        )
+
+        class tadWorkerData:
+            future: ThreadFuture
+            reservedNumbers: typing.Set[int]
+
+        workerDatas: typing.List[tadWorkerData] = list()
+
+        nErrors = 0
+
+        try:
+            for n in range(N_WORKERS):
+                logging.info("worker #{} is creating ...".format(n))
+
+                workerDatas.append(tadWorkerData())
+
+                workerDatas[n].reservedNumbers = set()
+
+                workerDatas[n].future = threadPool.submit(
+                    LOCAL_WORKER,
+                    os_ops,
+                    n,
+                    lock_dir,
+                    N_NUMBERS,
+                    workerDatas[n].reservedNumbers
+                )
+
+                assert workerDatas[n].future is not None
+
+            logging.info("OK. All the workers were created!")
+        except Exception as e:
+            nErrors += 1
+            logging.error("A problem is detected ({}): {}".format(type(e).__name__, str(e)))
+
+        logging.info("Will wait for stop of all the workers...")
+
+        nWorkers = 0
+
+        assert type(workerDatas) == list  # noqa: E721
+
+        for i in range(len(workerDatas)):
+            worker = workerDatas[i].future
+
+            if worker is None:
+                continue
+
+            nWorkers += 1
+
+            assert isinstance(worker, ThreadFuture)
+
+            try:
+                logging.info("Wait for worker #{}".format(i))
+                worker.result()
+            except Exception as e:
+                nErrors += 1
+                logging.error("Worker #{} finished with error ({}): {}".format(
+                    i,
+                    type(e).__name__,
+                    str(e),
+                ))
+            continue
+
+        assert nWorkers == N_WORKERS
+
+        if nErrors != 0:
+            raise RuntimeError("Some problems were detected. Please examine the log messages.")
+
+        logging.info("OK. Let's check worker results!")
+
+        reservedNumbers: typing.Dict[int, int] = dict()
+
+        for i in range(N_WORKERS):
+            logging.info("Worker #{} is checked ...".format(i))
+
+            workerNumbers = workerDatas[i].reservedNumbers
+            assert type(workerNumbers) == set  # noqa: E721
+
+            for n in workerNumbers:
+                if n < 0 or n >= N_NUMBERS:
+                    nErrors += 1
+                    logging.error("Unexpected number {}".format(n))
+                    continue
+
+                if n in reservedNumbers.keys():
+                    nErrors += 1
+                    logging.error("Number {} was already reserved by worker #{}".format(
+                        n,
+                        reservedNumbers[n]
+                    ))
+                else:
+                    reservedNumbers[n] = i
+
+                file_path = MAKE_PATH(lock_dir, n)
+                if not os_ops.path_exists(file_path):
+                    nErrors += 1
+                    logging.error("File {} is not found!".format(file_path))
+                    continue
+
+                continue
+
+        logging.info("OK. Let's check reservedNumbers!")
+
+        for n in range(N_NUMBERS):
+            if not (n in reservedNumbers.keys()):
+                nErrors += 1
+                logging.error("Number {} is not reserved!".format(n))
+                continue
+
+            file_path = MAKE_PATH(lock_dir, n)
+            if not os_ops.path_exists(file_path):
+                nErrors += 1
+                logging.error("File {} is not found!".format(file_path))
+                continue
+
+            # OK!
+            continue
+
+        logging.info("Verification is finished! Error count is {}.".format(nErrors))
+
+        if nErrors == 0:
+            logging.info("Test folder will be deleted!")
+            os_ops.rmdirs(lock_dir)
+
+        return

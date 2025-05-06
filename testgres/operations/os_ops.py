@@ -54,6 +54,10 @@ class OsOperations:
     def makedirs(self, path, remove_existing=False):
         raise NotImplementedError()
 
+    # Work with dirs
+    def makedir(self, path):
+        raise NotImplementedError()
+
     def rmdirs(self, path, ignore_errors=True):
         raise NotImplementedError()
 

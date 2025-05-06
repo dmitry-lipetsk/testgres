@@ -227,6 +227,11 @@ class RemoteOperations(OsOperations):
             raise Exception("Couldn't create dir {} because of error {}".format(path, error))
         return result
 
+    def makedir(self, path: str):
+        assert type(path) == str  # noqa: E721
+        cmd = ["mkdir", path]
+        self.exec_command(cmd)
+
     def rmdirs(self, path, ignore_errors=True):
         """
         Remove a directory in the remote server.
