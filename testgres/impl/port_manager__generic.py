@@ -51,8 +51,8 @@ class PortManager__Generic(PortManager):
                     continue
 
                 try:
-                    p = self.helper__make_lock_file_pach(port)
-                    self._os_ops.exclusive_creation(p, None)
+                    p = self.helper__make_lock_path(port)
+                    self._os_ops.makedir(p)
                 except:  # noqa: 722
                     continue
 
@@ -62,7 +62,7 @@ class PortManager__Generic(PortManager):
                     self._reserved_ports.add(port)
                 except:  # noqa: 722
                     assert not (port in self._reserved_ports)
-                    self._os_ops.remove_file(p)
+                    self._os_ops.rmdir(p)
                     raise
 
                 assert port in self._reserved_ports
@@ -80,7 +80,7 @@ class PortManager__Generic(PortManager):
         assert self._guard is not None
         assert type(self._reserved_ports) == set  # noqa: E721
 
-        lock_file_path = self.helper__make_lock_file_pach(number)
+        lock_file_path = self.helper__make_lock_path(number)
 
         with self._guard:
             assert number in self._reserved_ports
@@ -92,11 +92,11 @@ class PortManager__Generic(PortManager):
 
             assert isinstance(self._os_ops, OsOperations)
             assert self._os_ops.path_exists(lock_file_path)
-            self._os_ops.remove_file(lock_file_path)
+            self._os_ops.rmdir(lock_file_path)
 
         return
 
-    def helper__make_lock_file_pach(self, port_number: int) -> str:
+    def helper__make_lock_path(self, port_number: int) -> str:
         assert type(port_number) == int  # noqa: E721
         assert type(self._lock_dir) == str  # noqa: E721
 
