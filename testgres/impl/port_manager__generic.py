@@ -52,25 +52,24 @@ class PortManager__Generic(PortManager):
                     continue
 
                 try:
-                    p = self.helper__make_lock_path(port)
-                    self._os_ops.makedir(p)
+                    lock_path = self.helper__make_lock_path(port)
+                    self._os_ops.makedir(lock_path)
                 except:  # noqa: 722
                     continue
 
-                assert self._os_ops.path_exists(p)
+                assert self._os_ops.path_exists(lock_path)
 
                 try:
                     self._reserved_ports.add(port)
                 except:  # noqa: 722
                     assert not (port in self._reserved_ports)
-                    self._os_ops.rmdir(p)
+                    self._os_ops.rmdir(lock_path)
                     raise
 
                 assert port in self._reserved_ports
                 self._available_ports.discard(port)
                 assert port in self._reserved_ports
                 assert not (port in self._available_ports)
-
                 return port
 
         raise PortForException("Can't select a port.")
@@ -81,7 +80,7 @@ class PortManager__Generic(PortManager):
         assert self._guard is not None
         assert type(self._reserved_ports) == set  # noqa: E721
 
-        lock_file_path = self.helper__make_lock_path(number)
+        lock_path = self.helper__make_lock_path(number)
 
         with self._guard:
             assert number in self._reserved_ports
@@ -92,8 +91,8 @@ class PortManager__Generic(PortManager):
             assert number in self._available_ports
 
             assert isinstance(self._os_ops, OsOperations)
-            assert self._os_ops.path_exists(lock_file_path)
-            self._os_ops.rmdir(lock_file_path)
+            assert self._os_ops.path_exists(lock_path)
+            self._os_ops.rmdir(lock_path)
 
         return
 
