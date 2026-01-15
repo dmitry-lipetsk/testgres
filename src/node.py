@@ -1982,15 +1982,13 @@ class PostgresNode(object):
         self,
         dbname: str = "postgres",
         pgbench_tables: typing.Iterable[str] = sm_pgbench_tables
-    ) -> typing.Set[typing.Tuple[str, int]]:
+    ) -> typing.List[typing.Tuple[str, int]]:
         assert type(dbname) == str  # noqa: E721
 
         r1 = self._tables_checksum(dbname, pgbench_tables)
         assert type(r1) == list  # noqa: E721
 
-        r2 = set(r1)
-        assert type(r2) == set  # noqa: E721
-        return r2
+        return r1
 
     def set_auto_conf(self, options, config='postgresql.auto.conf', rm_options={}):
         """

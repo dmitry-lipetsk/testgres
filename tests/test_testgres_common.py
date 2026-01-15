@@ -2157,7 +2157,7 @@ class TestTestgresCommon:
                     assert record_count == table_checksum_test_data.record_count
 
                 actual_result = node.pgbench_table_checksums(C_DB, ["t"])
-                assert type(actual_result) == set  # noqa: E721
+                assert type(actual_result) == list  # noqa: E721
                 actual1 = actual_result.pop()
                 assert type(actual1) == tuple  # noqa: E721
                 assert len(actual1) == 2
@@ -2212,7 +2212,7 @@ class TestTestgresCommon:
         logging.info("run pgbench_table_checksums")
         full_checksums = node.pgbench_table_checksums()
         assert full_checksums is not None
-        assert type(full_checksums) == set  # noqa: E721
+        assert type(full_checksums) == list  # noqa: E721
         assert len(full_checksums) == 4
 
         expectedTables: typing.Dict[str, bool] = {
