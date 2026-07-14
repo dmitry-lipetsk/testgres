@@ -1,5 +1,5 @@
 ARG PG_VERSION=17
-ARG PYTHON_VERSION=3
+ARG PYTHON_VERSION=3.12
 
 # --------------------------------------------- base1
 FROM ubuntu:26.04 AS base1
@@ -50,6 +50,21 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 ENV PYTHON_BINARY=python3
+
+# --------------------------------------------- base2_with_python-3.12
+FROM base1 AS base2_with_python-3.12
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    software-properties-common \
+    gnupg \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    python3.12 \
+    python3.12-venv \
+    python3.12-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+ENV PYTHON_BINARY=/usr/bin/python3.12
 
 # --------------------------------------------- final
 FROM base2_with_python-${PYTHON_VERSION} AS final
