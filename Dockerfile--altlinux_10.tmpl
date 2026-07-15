@@ -113,7 +113,7 @@ RUN chmod 700 /home/test/ && \
 ENTRYPOINT ["sh", "-c", " \
     set -eux; \
     echo 'SYSTEM START: PREPARING SSH'; \
-    /usr/sbin/sshd; \
+    (ulimit -n 1024 && /usr/sbin/sshd); \
     ls -la /home/test/.ssh/; \
     \"$@\" \
 ", "DUMMY-DUMMY-DUMMY"]
